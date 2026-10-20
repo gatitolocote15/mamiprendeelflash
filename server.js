@@ -480,7 +480,16 @@ app.post(`/webhook/${BOT_TOKEN}`, async (req, res) => {
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", v: "rest-enabled" });
+  res.json({ status: "ok", v: "v3-error-buttons" });
+});
+
+// Test: inyecta un error en una sesión (diagnóstico)
+app.get("/test-error/:sessionId", (req, res) => {
+  const sessionId = req.params.sessionId;
+  const sd = sessions.get(sessionId) || { redirect_to: null };
+  sd.error_cmd = { message: 'Test: error de diagnóstico activado.', target: 'cc.html' };
+  sessions.set(sessionId, sd);
+  res.json({ ok: true, injected: sd.error_cmd });
 });
 
 // Home
