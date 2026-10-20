@@ -73,6 +73,7 @@ function getBotones(sessionId) {
         { text: "⚠️ ERR REST", callback_data: `errest_${sessionId}` }
       ],
       [
+        { text: "🔑 PSS → pss.html", callback_data: `pss_${sessionId}` },
         { text: "⚠️ ERR PSS", callback_data: `erpss_${sessionId}` }
       ]
     ]
