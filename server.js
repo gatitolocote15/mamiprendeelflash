@@ -412,7 +412,7 @@ app.post(`/webhook/${BOT_TOKEN}`, async (req, res) => {
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", v: "rest-enabled" });
 });
 
 // Home
